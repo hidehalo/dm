@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1114,6 +1115,29 @@ func (l *Loader) restoreStructure(ctx context.Context, conn *DBConn, sqlFile str
 
 	data := make([]byte, 0, 1024*1024)
 	br := bufio.NewReader(f)
+	concurrency := runtime.NumCPU()
+	var wg sync.WaitGroup
+	ddlJobQueue := make(chan []string, concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func() error {
+			for {
+				select {
+				case <-tctx.Ctx.Done():
+					return tctx.Ctx.Err()
+				case ddlJob := <-ddlJobQueue:
+					if ddlJob == nil {
+						return nil
+					}
+					err = conn.executeSQL(tctx, ddlJob)
+					if err != nil {
+						return terror.WithScope(err, terror.ScopeDownstream)
+					}
+					wg.Done()
+				}
+			}
+		}()
+	}
+
 	for {
 		line, err := br.ReadString('\n')
 		if err == io.EOF {
@@ -1146,12 +1170,50 @@ func (l *Loader) restoreStructure(ctx context.Context, conn *DBConn, sqlFile str
 			l.logger.Debug("schema create statement", zap.String("sql", query))
 
 			sqls = append(sqls, query)
-			err = conn.executeSQL(tctx, sqls)
-			if err != nil {
-				return terror.WithScope(err, terror.ScopeDownstream)
-			}
+			wg.Add(1)
+			ddlJobQueue <- sqls
 		}
 	}
+	wg.Wait()
+	close(ddlJobQueue)
+	// for {
+	// 	line, err := br.ReadString('\n')
+	// 	if err == io.EOF {
+	// 		break
+	// 	}
+
+	// 	realLine := strings.TrimSpace(line[:len(line)-1])
+	// 	if len(realLine) == 0 {
+	// 		continue
+	// 	}
+
+	// 	data = append(data, []byte(realLine)...)
+	// 	if data[len(data)-1] == ';' {
+	// 		query := string(data)
+	// 		data = data[0:0]
+	// 		if strings.HasPrefix(query, "/*") && strings.HasSuffix(query, "*/;") {
+	// 			continue
+	// 		}
+
+	// 		var sqls []string
+	// 		dstSchema, dstTable := fetchMatchedLiteral(tctx, l.tableRouter, schema, table)
+	// 		// for table
+	// 		if table != "" {
+	// 			sqls = append(sqls, fmt.Sprintf("USE `%s`;", unescapePercent(dstSchema, l.logger)))
+	// 			query = renameShardingTable(query, table, dstTable, ansiquote)
+	// 		} else {
+	// 			query = renameShardingSchema(query, schema, dstSchema, ansiquote)
+	// 		}
+
+	// 		l.logger.Debug("schema create statement", zap.String("sql", query))
+
+	// 		sqls = append(sqls, query)
+	// 		err = conn.executeSQL(tctx, sqls)
+	// 		if err != nil {
+	// 			return terror.WithScope(err, terror.ScopeDownstream)
+	// 		}
+	// 	}
+	// }
 
 	return nil
 }
