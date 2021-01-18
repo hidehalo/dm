@@ -8,20 +8,20 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function prepare_data() {
-    run_sql 'DROP DATABASE if exists start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql 'CREATE DATABASE start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "CREATE TABLE start_task.t$1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql 'DROP DATABASE if exists start_task;' $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql 'CREATE DATABASE start_task;' $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "CREATE TABLE start_task.t$1(i TINYINT, j INT UNIQUE KEY);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     for j in $(seq 100); do
-        run_sql "INSERT INTO start_task.t$1 VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "INSERT INTO start_task.t$1 VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     done
 }
 
 function lazy_init_tracker() {
-    run_sql 'DROP DATABASE if exists start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql 'CREATE DATABASE start_task;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql 'DROP DATABASE if exists start_task;' $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql 'CREATE DATABASE start_task;' $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     for j in $(seq 100); do
-        run_sql "CREATE TABLE start_task.t$j(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
-        run_sql "INSERT INTO start_task.t$j VALUES (1,10001),(1,10011);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "CREATE TABLE start_task.t$j(i TINYINT, j INT UNIQUE KEY);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "INSERT INTO start_task.t$j VALUES (1,10001),(1,10011);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     done
 
     run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -39,7 +39,7 @@ function lazy_init_tracker() {
 
     # only table 1-50 flush checkpoint
     for j in $(seq 50); do
-        run_sql "INSERT INTO start_task.t$j VALUES (2,20002),(2,20022);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "INSERT INTO start_task.t$j VALUES (2,20002),(2,20022);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     done
 
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -50,8 +50,8 @@ function lazy_init_tracker() {
     dmctl_start_task_standalone "$cur/conf/dm-task.yaml"
 
     for j in $(seq 100); do
-        run_sql "INSERT INTO start_task.t$j VALUES (3,30003),(3,30033);" $MYSQL_PORT1 $MYSQL_PASSWORD1
-        run_sql "INSERT INTO start_task.t$j VALUES (4,40004),(4,40044);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "INSERT INTO start_task.t$j VALUES (3,30003),(3,30033);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "INSERT INTO start_task.t$j VALUES (4,40004),(4,40044);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     done
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 20
 
@@ -77,8 +77,8 @@ function run() {
         export GO_FAILPOINTS=${failpoints[i]}
 
         # clear downstream env
-        run_sql 'DROP DATABASE if exists dm_meta;' $TIDB_PORT $TIDB_PASSWORD
-        run_sql 'DROP DATABASE if exists start_task;' $TIDB_PORT $TIDB_PASSWORD
+        run_sql 'DROP DATABASE if exists dm_meta;' 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
+        run_sql 'DROP DATABASE if exists start_task;' 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
         prepare_data $i
 
         run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml

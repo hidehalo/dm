@@ -213,8 +213,8 @@ function run() {
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
     # test rotate binlog, after rotate and ddl, master binlog should be equal to sync binlog
-    run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "truncate table incremental_mode.t1;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "flush logs;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "truncate table incremental_mode.t1;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
     sleep 2
     curl -X GET 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test > $WORK_DIR/status.log

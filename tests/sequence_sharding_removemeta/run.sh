@@ -45,7 +45,7 @@ function run() {
     dmctl_stop_task $task_name
 
     # clean downstream data
-    run_sql "drop database if exists sharding_target3" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "drop database if exists sharding_target3" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     # run all the data
     run_sql_file $cur/data/db2.increment2.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
     # start again with remove-meta

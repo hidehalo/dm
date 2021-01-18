@@ -15,7 +15,8 @@ check_mysql() {
     host=$1
     port=$2
     password=$3
-    while ! mysql -u root -h ${host} -P ${port} -p${password} -e 'select version();'; do
+    echo ${!password:--p${password}}
+    while ! mysql -u root -h ${host} -P ${port} ${!password:--p${password}} -e 'select version();'; do
         i=$((i+1))
         if [ "$i" -gt 10 ]; then
             echo "wait for mysql ${host}:${port} timeout"
@@ -79,7 +80,7 @@ function run() {
     TEST_DIR="$TEST_DIR" \
     PATH="tests/_utils:$PATH" \
     TEST_NAME="$(basename "$(dirname "$script")")" \
-    bash +x "$script"
+    bash -x "$script"
 }
 
 if [ "$test_case" == "*" ]; then

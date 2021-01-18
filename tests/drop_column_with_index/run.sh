@@ -38,8 +38,8 @@ function run() {
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
     # check column covered by multi-column indices won't drop, and its indices won't drop
-    run_sql "alter table drop_column_with_index.t1 drop column c2;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "show index from drop_column_with_index.t1" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "alter table drop_column_with_index.t1 drop column c2;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "show index from drop_column_with_index.t1" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     check_count "Column_name: c2" 3
 
     export GO_FAILPOINTS=""

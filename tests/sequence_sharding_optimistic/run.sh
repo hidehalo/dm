@@ -49,7 +49,7 @@ run() {
 
     # check database `sharding_seq_tmp` exists
     sleep 2
-    run_sql "select count(*) from sharding_seq_tmp.t1;" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "select count(*) from sharding_seq_tmp.t1;" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     check_contains "count(*): 1"
 
     # try to get schema for the table, but the stage is not paused.

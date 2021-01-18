@@ -81,7 +81,7 @@ function run() {
     sed -i "s/password: '\*\*\*\*\*\*'/password: \"\"/g" $WORK_DIR/task.yaml
     diff $cur/conf/task.yaml $WORK_DIR/task.yaml || exit 1
     
-    run_sql "show create table \`dm_meta\`.\`test_syncer_checkpoint\`" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "show create table \`dm_meta\`.\`test_syncer_checkpoint\`" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     check_contains "\`exit_safe_binlog_name\` varchar(128) DEFAULT ''"
     # different TiDB will output DEFAULT 0 or DEFAULT '0'
     check_contains "\`exit_safe_binlog_pos\` int(10) unsigned DEFAULT "

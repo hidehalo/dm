@@ -314,8 +314,8 @@ function run() {
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
     echo "flush logs to force rotate binlog file"
-    run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "flush logs;" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "flush logs;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "flush logs;" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
     echo "kill dm-master1 and kill dm-master2"
     ps aux | grep dm-master1 |awk '{print $2}'|xargs kill || true
