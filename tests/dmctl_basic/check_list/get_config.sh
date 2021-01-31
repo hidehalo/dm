@@ -69,9 +69,9 @@ function diff_get_config() {
 function get_config_to_file() {
     diff_get_config
 
-    sed -i "s/password: '\*\*\*\*\*\*'/password: ''/g" $WORK_DIR/get_task.yaml
-    sed -i "s/password: '\*\*\*\*\*\*'/password: '123456'/g" $WORK_DIR/get_source1.yaml
-    sed -i "s/password: '\*\*\*\*\*\*'/password: '123456'/g" $WORK_DIR/get_source2.yaml
+    gsed -i "s/password: '\*\*\*\*\*\*'/password: ''/g" $WORK_DIR/get_task.yaml
+    gsed -i "s/password: '\*\*\*\*\*\*'/password: '123456'/g" $WORK_DIR/get_source1.yaml
+    gsed -i "s/password: '\*\*\*\*\*\*'/password: '123456'/g" $WORK_DIR/get_source2.yaml
 
     # stop task
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

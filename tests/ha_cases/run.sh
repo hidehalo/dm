@@ -356,7 +356,7 @@ function test_standalone_running() {
     check_sync_diff $WORK_DIR $cur/conf/diff-standalone-config.toml
 
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
         "start-task $cur/conf/standalone-task2.yaml" \
@@ -574,7 +574,7 @@ function test_multi_task_reduce_and_restart_worker() {
                 status_str=$status_str$($PWD/bin/dmctl.test DEVEL --master-addr "127.0.0.1":$MASTER_PORT query-status $name)
             done
             search_str="\"stage\": \"Running\""
-            running_count=$(echo $status_str | sed "s/$search_str/$search_str\n/g" | grep -c "$search_str")
+            running_count=$(echo $status_str | gsed "s/$search_str/$search_str\n/g" | grep -c "$search_str")
             if [ $running_count != 8 ]; then
                 echo "error running worker"
                 echo $status_str
@@ -673,7 +673,7 @@ function test_config_name() {
     echo "[$(date)] <<<<<< start test_config_name >>>>>>"
 
     cp $cur/conf/dm-master-join2.toml $WORK_DIR/dm-master-join2.toml
-    sed -i "s/name = \"master2\"/name = \"master1\"/g" $WORK_DIR/dm-master-join2.toml
+    gsed -i "s/name = \"master2\"/name = \"master1\"/g" $WORK_DIR/dm-master-join2.toml
     run_dm_master $WORK_DIR/master-join1 $MASTER_PORT1 $cur/conf/dm-master-join1.toml
     check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
     run_dm_master $WORK_DIR/master-join2 $MASTER_PORT2 $WORK_DIR/dm-master-join2.toml
@@ -681,7 +681,7 @@ function test_config_name() {
 
     TEST_CHAR="!@#$%^\&*()_+¥"
     cp $cur/conf/dm-master-join2.toml $WORK_DIR/dm-master-join2.toml
-    sed -i "s/name = \"master2\"/name = \"test$TEST_CHAR\"/g" $WORK_DIR/dm-master-join2.toml
+    gsed -i "s/name = \"master2\"/name = \"test$TEST_CHAR\"/g" $WORK_DIR/dm-master-join2.toml
     run_dm_master $WORK_DIR/master-join2 $MASTER_PORT2 $WORK_DIR/dm-master-join2.toml
     check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2
 
@@ -689,14 +689,14 @@ function test_config_name() {
     check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
     cp $cur/conf/dm-worker2.toml $WORK_DIR/dm-worker2.toml
-    sed -i "s/name = \"worker2\"/name = \"worker1\"/g" $WORK_DIR/dm-worker2.toml
+    gsed -i "s/name = \"worker2\"/name = \"worker1\"/g" $WORK_DIR/dm-worker2.toml
     run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $WORK_DIR/dm-worker2.toml
     sleep 2
 
     check_log_contain_with_retry "[dm-worker with name {\"name\":\"worker1\",\"addr\":\"127.0.0.1:8262\"} already exists]" $WORK_DIR/worker2/log/dm-worker.log
 
     cp $cur/conf/dm-worker2.toml $WORK_DIR/dm-worker2.toml
-    sed -i "s/name = \"worker2\"/name = \"master1\"/g" $WORK_DIR/dm-worker2.toml
+    gsed -i "s/name = \"worker2\"/name = \"master1\"/g" $WORK_DIR/dm-worker2.toml
     run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $WORK_DIR/dm-worker2.toml
     check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
