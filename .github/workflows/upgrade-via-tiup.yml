@@ -127,7 +127,7 @@ jobs:
       working-directory: ${{ env.working-directory }}
       run: |
           cd ${{ env.working-directory }}/tests/tiup/docker
-          sed -i "s/tidb:v4.0.7/tidb:v3.0.19/g" docker-compose.yml
+          gsed -i "s/tidb:v4.0.7/tidb:v3.0.19/g" docker-compose.yml
           GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
 
     - name: Run test cases before upgrade
@@ -140,7 +140,7 @@ jobs:
       working-directory: ${{ env.working-directory }}
       run: |
           cd ${{ env.working-directory }}/tests/tiup/docker
-          sed -i "s/tidb:v3.0.19/tidb:v4.0.7/g" docker-compose.yml
+          gsed -i "s/tidb:v3.0.19/tidb:v4.0.7/g" docker-compose.yml
           GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
 
     - name: Run test cases after upgrade

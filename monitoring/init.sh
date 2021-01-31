@@ -5,7 +5,7 @@ fi
 
 # DM
 \cp -f /tmp/dm.json $GF_PROVISIONING_PATH/dashboards
-sed -i 's/Test-Cluster-DM/'$DM_CLUSTER_NAME'-DM/g'  $GF_PROVISIONING_PATH/dashboards/dm.json
+gsed -i 's/Test-Cluster-DM/'$DM_CLUSTER_NAME'-DM/g'  $GF_PROVISIONING_PATH/dashboards/dm.json
 
 # Rules
 if [ ! -d $PROM_CONFIG_PATH/rules  ];then
@@ -16,7 +16,7 @@ echo $META_TYPE
 echo $META_INSTANCE
 echo $META_VALUE
 \cp -f /tmp/dm_worker.rules.yml $PROM_CONFIG_PATH/rules
-sed -i 's/ENV_LABELS_ENV/'$DM_CLUSTER_NAME'/g' $PROM_CONFIG_PATH/rules/dm_worker.rules.yml
+gsed -i 's/ENV_LABELS_ENV/'$DM_CLUSTER_NAME'/g' $PROM_CONFIG_PATH/rules/dm_worker.rules.yml
 
 # Copy Persistent rules to override raw files
 if [ ! -z $PROM_PERSISTENT_DIR ];
@@ -33,7 +33,7 @@ then
 
     if [ ! -z $GF_DM_PROMETHEUS_URL ];
     then
-        sed -i 's,http://127.0.0.1:9090,'$GF_DM_PROMETHEUS_URL',g' /tmp/dm-cluster-datasource.yaml
+        gsed -i 's,http://127.0.0.1:9090,'$GF_DM_PROMETHEUS_URL',g' /tmp/dm-cluster-datasource.yaml
     fi
 
     \cp -f /tmp/dm-cluster-datasource.yaml $GF_DATASOURCE_PATH/

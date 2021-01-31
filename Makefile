@@ -196,7 +196,7 @@ compatibility_test: check_third_party_binary
 
 # unify cover mode in coverage files, more details refer to tests/_utils/run_dm_ctl
 coverage_fix_cover_mode:
-	sed -i "s/mode: count/mode: atomic/g" $(TEST_DIR)/cov.*.dmctl.*.out
+	gsed -i "s/mode: count/mode: atomic/g" $(TEST_DIR)/cov.*.dmctl.*.out
 
 coverage: coverage_fix_cover_mode tools_setup
 	tools/bin/gocovmerge "$(TEST_DIR)"/cov.* | grep -vE ".*.pb.go|.*.pb.gw.go|.*.__failpoint_binding__.go|.*debug-tools.*|.*portal.*|.*chaos.*" > "$(TEST_DIR)/all_cov.out"

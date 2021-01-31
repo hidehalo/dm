@@ -120,8 +120,8 @@ function run() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
 
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
@@ -164,7 +164,7 @@ function run() {
     check_task_not_pass $cur/conf/dm-task2.yaml
 
     cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-error-database-config.yaml
-    sed -i "s/password: \"\"/password: \"wrond password\"/g" $WORK_DIR/dm-task-error-database-config.yaml
+    gsed -i "s/password: \"\"/password: \"wrond password\"/g" $WORK_DIR/dm-task-error-database-config.yaml
     check_task_error_database_config $WORK_DIR/dm-task-error-database-config.yaml
 
     echo "dmctl_start_task"

@@ -58,11 +58,11 @@ function run() {
     cp $cur/conf/dm-worker1.toml $WORK_DIR/
     cp $cur/conf/dm-task.yaml $WORK_DIR/
 
-    sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
-    sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
-    sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master3.toml
-    sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker1.toml
-    sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
+    gsed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
+    gsed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
+    gsed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master3.toml
+    gsed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker1.toml
+    gsed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
 
     run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
     run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
@@ -75,7 +75,7 @@ function run() {
     check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
     run_dm_ctl_with_tls $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
         "operate-source create $WORK_DIR/source1.yaml" \
         "\"result\": true" 2 \

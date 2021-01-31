@@ -27,9 +27,9 @@ function run() {
     check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 
-    cat $WORK_DIR/source1.yaml | sed 's/$/\\n/' | sed 's/"/\\"/g' | tr -d '\n' > $WORK_DIR/source1.yaml.bak
+    cat $WORK_DIR/source1.yaml | gsed 's/$/\\n/' | gsed 's/"/\\"/g' | tr -d '\n' > $WORK_DIR/source1.yaml.bak
     source_data=`cat $WORK_DIR/source1.yaml.bak`
     rm $WORK_DIR/source1.yaml.bak
     echo $source_data
@@ -38,7 +38,7 @@ function run() {
     check_log_contains $WORK_DIR/create-source.log "\"source\": \"$SOURCE_ID1\"" 1
 
     echo "start task and check stage"
-    cat $cur/conf/dm-task.yaml | sed 's/$/\\n/' | sed 's/"/\\"/g' | tr -d '\n' > $WORK_DIR/task.yaml.bak
+    cat $cur/conf/dm-task.yaml | gsed 's/$/\\n/' | gsed 's/"/\\"/g' | tr -d '\n' > $WORK_DIR/task.yaml.bak
     task_data=`cat $WORK_DIR/task.yaml.bak`
     rm $WORK_DIR/task.yaml.bak
     echo $task_data
