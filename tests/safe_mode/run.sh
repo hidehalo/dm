@@ -20,14 +20,14 @@ function consistency_none() {
     check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
     cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
-    sed -i "/timezone/i\clean-dump-file: false" $WORK_DIR/dm-task.yaml
-    sed -i "s/extra-args: \"\"/extra-args: \"--consistency none\"/g" $WORK_DIR/dm-task.yaml
+    gsed -i "/timezone/i\clean-dump-file: false" $WORK_DIR/dm-task.yaml
+    gsed -i "s/extra-args: \"\"/extra-args: \"--consistency none\"/g" $WORK_DIR/dm-task.yaml
     dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
@@ -74,8 +74,8 @@ function run() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 

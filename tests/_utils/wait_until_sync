@@ -19,17 +19,17 @@ while true; do
 
     value="\"stage\": \"Paused\""
     # below grep will print the count of $value, exit when not 0
-    sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value" && exit 1 || true
+    gsed "s/$value/$value\n/g" $dmctl_log | grep -c "$value" && exit 1 || true
 
     value="\"unit\": \"Dump\""
-    got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+    got=$(gsed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
     if [ "$got" -eq 1 ]; then
         echo "in Dump unit"
         continue
     fi
 
     value="\"unit\": \"Load\""
-    got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+    got=$(gsed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
     if [ "$got" -eq 1 ]; then
         echo -n "in Load unit"
         grep "progress" $dmctl_log
@@ -37,7 +37,7 @@ while true; do
     fi
 
     value="\"unit\": \"Sync\""
-    got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+    got=$(gsed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
     if [ "$got" -eq 1 ]; then
         echo "in Sync unit"
         exit 0

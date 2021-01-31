@@ -45,8 +45,8 @@ function run() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
@@ -114,7 +114,7 @@ function run() {
     run_sql_file $cur/data/db2.increment3.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
     cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
     printf "\n[[table-config.source-tables]]\ninstance-id = \"source-1\"\nschema = \"sharding2\"\ntable  = \"~t.*\"" >> $WORK_DIR/diff_config.toml
-    sed -i "s/^# range-placeholder/range = \"uid < 70000\"/g" $WORK_DIR/diff_config.toml
+    gsed -i "s/^# range-placeholder/range = \"uid < 70000\"/g" $WORK_DIR/diff_config.toml
     echo "check sync diff for the third increment replication"
     check_sync_diff $WORK_DIR $WORK_DIR/diff_config.toml
 

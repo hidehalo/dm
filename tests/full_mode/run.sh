@@ -15,11 +15,11 @@ function fail_acquire_global_lock() {
     check_contains 'Query OK, 3 rows affected'
 
     cp $cur/data/db1.prepare.user.sql $WORK_DIR/db1.prepare.user.sql
-    sed -i "/revoke create temporary/i\revoke reload on *.* from 'dm_full'@'%';" $WORK_DIR/db1.prepare.user.sql
+    gsed -i "/revoke create temporary/i\revoke reload on *.* from 'dm_full'@'%';" $WORK_DIR/db1.prepare.user.sql
     run_sql_file $WORK_DIR/db1.prepare.user.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     check_count 'Query OK, 0 rows affected' 8
     cp $cur/data/db2.prepare.user.sql $WORK_DIR/db2.prepare.user.sql
-    sed -i "/revoke create temporary/i\revoke reload on *.* from 'dm_full'@'%';" $WORK_DIR/db2.prepare.user.sql
+    gsed -i "/revoke create temporary/i\revoke reload on *.* from 'dm_full'@'%';" $WORK_DIR/db2.prepare.user.sql
     run_sql_file $WORK_DIR/db2.prepare.user.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
     check_count 'Query OK, 0 rows affected' 8
 
@@ -32,13 +32,13 @@ function fail_acquire_global_lock() {
 
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
     cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
-    sed -i '/timezone/i\ignore-checking-items: ["dump_privilege"]' $WORK_DIR/dm-task.yaml
+    gsed -i '/timezone/i\ignore-checking-items: ["dump_privilege"]' $WORK_DIR/dm-task.yaml
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
         "start-task $WORK_DIR/dm-task.yaml --remove-meta"
 
@@ -64,7 +64,7 @@ function escape_schema() {
     cp $cur/data/db2.prepare.sql $WORK_DIR/db2.prepare.sql
     cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
     cp $cur/conf/diff_config.toml $WORK_DIR/diff_config.toml
-    sed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml $WORK_DIR/diff_config.toml
+    gsed -i "s/full_mode/full\/mode/g" $WORK_DIR/db1.prepare.sql $WORK_DIR/db2.prepare.sql $WORK_DIR/dm-task.yaml $WORK_DIR/diff_config.toml
 
     run_sql_file $WORK_DIR/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     check_contains 'Query OK, 2 rows affected'
@@ -90,8 +90,8 @@ function escape_schema() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
@@ -162,8 +162,8 @@ function run() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 

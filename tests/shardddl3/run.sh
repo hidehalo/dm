@@ -619,8 +619,8 @@ function DM_102_CASE() {
     found=false
     for ((k=0; k<10; k++)); do
         content=$($PWD/bin/dmctl.test DEVEL --master-addr=127.0.0.1:$MASTER_PORT query-status test)
-        master2=$(echo $content | sed 's/"masterBinlog":/"masterBinlog":\n/g' | awk -F')' 'FNR==3{print $1}')
-        syncer2=$(echo $content | sed 's/"syncerBinlog":/"syncerBinlog":\n/g' | awk -F')' 'FNR==3{print $1}')
+        master2=$(echo $content | gsed 's/"masterBinlog":/"masterBinlog":\n/g' | awk -F')' 'FNR==3{print $1}')
+        syncer2=$(echo $content | gsed 's/"syncerBinlog":/"syncerBinlog":\n/g' | awk -F')' 'FNR==3{print $1}')
         if [ "$master2" != "$syncer2" ]; then
             found=true
             break

@@ -24,23 +24,23 @@ function test_session_config(){
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
     cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
-    sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
 
     # error config
     # there should be a error message like "Incorrect argument type to variable 'tidb_retry_limit'"
     # but different TiDB version output different message. so we only roughly match here
-    sed -i 's/tidb_retry_limit: "10"/tidb_retry_limit: "fjs"/g'  $WORK_DIR/dm-task.yaml
+    gsed -i 's/tidb_retry_limit: "10"/tidb_retry_limit: "fjs"/g'  $WORK_DIR/dm-task.yaml
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
         "start-task $WORK_DIR/dm-task.yaml --remove-meta" \
         "tidb_retry_limit" 1
 
-    sed -i 's/tidb_retry_limit: "fjs"/tidb_retry_limit: "10"/g'  $WORK_DIR/dm-task.yaml
+    gsed -i 's/tidb_retry_limit: "fjs"/tidb_retry_limit: "10"/g'  $WORK_DIR/dm-task.yaml
     dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -56,7 +56,7 @@ function test_query_timeout(){
     export GO_FAILPOINTS="github.com/pingcap/dm/syncer/BlockSyncStatus=return(\"5s\")"
 
     cp $cur/conf/dm-master.toml $WORK_DIR/dm-master.toml
-    sed -i 's/rpc-timeout = "30s"/rpc-timeout = "3s"/g' $WORK_DIR/dm-master.toml
+    gsed -i 's/rpc-timeout = "30s"/rpc-timeout = "3s"/g' $WORK_DIR/dm-master.toml
 
     run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     check_contains 'Query OK, 2 rows affected'
@@ -73,14 +73,14 @@ function test_query_timeout(){
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
     # start DM task only
     cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
-    sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
     dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
     
     # `query-status` timeout
@@ -124,8 +124,8 @@ function test_stop_task_before_checkpoint(){
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
@@ -194,14 +194,14 @@ function run() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
     # start DM task only
     cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
-    sed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/name: test/name: $ILLEGAL_CHAR_NAME/g" $WORK_DIR/dm-task.yaml
     dmctl_start_task "$WORK_DIR/dm-task.yaml" "--remove-meta"
 
     # use sync_diff_inspector to check full dump loader

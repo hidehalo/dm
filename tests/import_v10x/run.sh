@@ -35,10 +35,10 @@ function run() {
     echo "source2 master status", $binlog_name2, $binlog_pos2, $binlog_gtid2
 
     cp $cur/data/v106_syncer_checkpoint.sql $WORK_DIR/v106_syncer_checkpoint.sql
-    sed -i "s/BINLOG_NAME1/$binlog_name1/g" $WORK_DIR/v106_syncer_checkpoint.sql
-    sed -i "s/BINLOG_POS1/$binlog_pos1/g" $WORK_DIR/v106_syncer_checkpoint.sql
-    sed -i "s/BINLOG_NAME2/$binlog_name2/g" $WORK_DIR/v106_syncer_checkpoint.sql
-    sed -i "s/BINLOG_POS2/$binlog_pos2/g" $WORK_DIR/v106_syncer_checkpoint.sql
+    gsed -i "s/BINLOG_NAME1/$binlog_name1/g" $WORK_DIR/v106_syncer_checkpoint.sql
+    gsed -i "s/BINLOG_POS1/$binlog_pos1/g" $WORK_DIR/v106_syncer_checkpoint.sql
+    gsed -i "s/BINLOG_NAME2/$binlog_name2/g" $WORK_DIR/v106_syncer_checkpoint.sql
+    gsed -i "s/BINLOG_POS2/$binlog_pos2/g" $WORK_DIR/v106_syncer_checkpoint.sql
 
     run_sql_file $WORK_DIR/v106_syncer_checkpoint.sql 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
 
@@ -78,7 +78,7 @@ function run() {
         "get-config task test --file $WORK_DIR/task.yaml" \
         "\"result\": true" 1
 
-    sed -i "s/password: '\*\*\*\*\*\*'/password: \"\"/g" $WORK_DIR/task.yaml
+    gsed -i "s/password: '\*\*\*\*\*\*'/password: \"\"/g" $WORK_DIR/task.yaml
     diff $cur/conf/task.yaml $WORK_DIR/task.yaml || exit 1
     
     run_sql "show create table \`dm_meta\`.\`test_syncer_checkpoint\`" $TIDB_PORT $TIDB_PASSWORD

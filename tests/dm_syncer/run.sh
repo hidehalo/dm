@@ -22,8 +22,8 @@ function run() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
@@ -50,7 +50,7 @@ function run() {
     cat $cur/conf/dm-syncer-2.toml > $WORK_DIR/dm-syncer-2.toml
     cat $cur/conf/old_meta_file > $WORK_DIR/old_meta_file
     # $worker1_run_source_1 > 0 means source1 is operated to worker1
-    worker1_run_source_1=$(sed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
+    worker1_run_source_1=$(gsed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
     if [ $worker1_run_source_1 -gt 0 ]
     then
         name1=$(grep "Log: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata|awk -F: '{print $2}'|tr -d ' ')
@@ -63,10 +63,10 @@ function run() {
         name1=$(grep "Log: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata|awk -F: '{print $2}'|tr -d ' ')
         pos1=$(grep "Pos: " $WORK_DIR/worker2/dumped_data.$TASK_NAME/metadata|awk -F: '{print $2}'|tr -d ' ')
     fi
-    sed -i "s/binlog-name-placeholder-1/\"$name1\"/g" $WORK_DIR/dm-syncer-1.toml
-    sed -i "s/binlog-pos-placeholder-1/$pos1/g" $WORK_DIR/dm-syncer-1.toml
-    sed -i "s/binlog-name-placeholder-2/\"$name2\"/g" $WORK_DIR/old_meta_file
-    sed -i "s/binlog-pos-placeholder-2/$pos2/g" $WORK_DIR/old_meta_file
+    gsed -i "s/binlog-name-placeholder-1/\"$name1\"/g" $WORK_DIR/dm-syncer-1.toml
+    gsed -i "s/binlog-pos-placeholder-1/$pos1/g" $WORK_DIR/dm-syncer-1.toml
+    gsed -i "s/binlog-name-placeholder-2/\"$name2\"/g" $WORK_DIR/old_meta_file
+    gsed -i "s/binlog-pos-placeholder-2/$pos2/g" $WORK_DIR/old_meta_file
     run_dm_syncer $WORK_DIR/syncer1 $WORK_DIR/dm-syncer-1.toml
     meta_file=$WORK_DIR/old_meta_file
     run_dm_syncer $WORK_DIR/syncer2 $WORK_DIR/dm-syncer-2.toml $meta_file --syncer-config-format syncer2

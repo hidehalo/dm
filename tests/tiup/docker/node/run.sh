@@ -10,7 +10,7 @@ if [ "${AUTHORIZED_KEYS}" != "**None**" ]; then
     arr=$(echo ${AUTHORIZED_KEYS} | tr "," "\n")
     for x in $arr
     do
-        x=$(echo $x |sed -e 's/^ *//' -e 's/ *$//')
+        x=$(echo $x |gsed -e 's/^ *//' -e 's/ *$//')
         cat /root/.ssh/authorized_keys | grep "$x" >/dev/null 2>&1
         if [ $? -ne 0 ]; then
             echo "=> Adding public key to /root/.ssh/authorized_keys: $x"
