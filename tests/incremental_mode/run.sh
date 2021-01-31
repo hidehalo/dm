@@ -38,8 +38,8 @@ function run() {
     # operate mysql config to worker
     cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
     cp $cur/conf/source2.yaml $WORK_DIR/source2.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
-    sed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
+    gsed -i "/relay-binlog-name/i\relay-dir: $WORK_DIR/worker2/relay_log" $WORK_DIR/source2.yaml
     dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
     dmctl_operate_source create $WORK_DIR/source2.yaml $SOURCE_ID2
 
@@ -59,10 +59,10 @@ function run() {
     # start a task in `full` mode
     echo "start task in full mode"
     cat $cur/conf/dm-task.yaml > $WORK_DIR/dm-task.yaml
-    sed -i "s/task-mode-placeholder/full/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/task-mode-placeholder/full/g" $WORK_DIR/dm-task.yaml
     # avoid cannot unmarshal !!str `binlog-...` into uint32 error
-    sed -i "s/binlog-pos-placeholder-1/4/g" $WORK_DIR/dm-task.yaml
-    sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-pos-placeholder-1/4/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
     dmctl_start_task $WORK_DIR/dm-task.yaml
 
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
@@ -70,7 +70,7 @@ function run() {
     dmctl_stop_task $TASK_NAME
 
     # $worker1_run_source_1 > 0 means source1 is operated to worker1
-    worker1_run_source_1=$(sed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
+    worker1_run_source_1=$(gsed "s/$SOURCE_ID1/$SOURCE_ID1\n/g" $WORK_DIR/worker1/log/dm-worker.log | grep -c "$SOURCE_ID1") || true
     if [ $worker1_run_source_1 -gt 0 ]
     then
         name1=$(grep "Log: " $WORK_DIR/worker1/dumped_data.$TASK_NAME/metadata|awk -F: '{print $2}'|tr -d ' ')
@@ -101,9 +101,9 @@ function run() {
     check_count 'Query OK, 0 rows affected' 7
 
     # update mysql config
-    sed -i "s/root/dm_incremental/g" $WORK_DIR/source1.yaml
-    sed -i "s/relay-binlog-gtid: ''/relay-binlog-gtid: '$gtid1'/g" $WORK_DIR/source1.yaml
-    sed -i "s/root/dm_incremental/g" $WORK_DIR/source2.yaml
+    gsed -i "s/root/dm_incremental/g" $WORK_DIR/source1.yaml
+    gsed -i "s/relay-binlog-gtid: ''/relay-binlog-gtid: '$gtid1'/g" $WORK_DIR/source1.yaml
+    gsed -i "s/root/dm_incremental/g" $WORK_DIR/source2.yaml
 
     run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
         "operate-source update $WORK_DIR/source1.yaml" \
@@ -119,14 +119,14 @@ function run() {
 
     echo "start task in incremental mode"
     cat $cur/conf/dm-task.yaml > $WORK_DIR/dm-task.yaml
-    sed -i "s/task-mode-placeholder/incremental/g" $WORK_DIR/dm-task.yaml
-    sed -i "s/binlog-name-placeholder-1//g" $WORK_DIR/dm-task.yaml
-    sed -i "s/binlog-pos-placeholder-1//g" $WORK_DIR/dm-task.yaml
-    sed -i "s/binlog-gtid-placeholder-1/$gtid1/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/task-mode-placeholder/incremental/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-name-placeholder-1//g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-pos-placeholder-1//g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-gtid-placeholder-1/$gtid1/g" $WORK_DIR/dm-task.yaml
 
-    sed -i "s/binlog-name-placeholder-2/$name2/g" $WORK_DIR/dm-task.yaml
-    sed -i "s/binlog-pos-placeholder-2/$pos2/g" $WORK_DIR/dm-task.yaml
-    sed -i "s/binlog-gtid-placeholder-2/$gtid2/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-name-placeholder-2/$name2/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-pos-placeholder-2/$pos2/g" $WORK_DIR/dm-task.yaml
+    gsed -i "s/binlog-gtid-placeholder-2/$gtid2/g" $WORK_DIR/dm-task.yaml
 
     export GO_FAILPOINTS="github.com/pingcap/dm/syncer/WaitUserCancel=return(8)"
     run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
@@ -226,8 +226,8 @@ function run() {
 
     sleep 2
     curl -X GET 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/test > $WORK_DIR/status.log
-    SYNCER_BINLOG=`cat $WORK_DIR/status.log | sed 's/.*mysql-replica-01.*\"syncerBinlog\":\"\(.*\)\",\"syncerBinlogGtid.*mysql-replica-02.*/\1/g'`
-    MASTER_BINLOG=`cat $WORK_DIR/status.log | sed 's/.*mysql-replica-01.*\"masterBinlog\":\"\(.*\)\",\"masterBinlogGtid.*mysql-replica-02.*/\1/g'`
+    SYNCER_BINLOG=`cat $WORK_DIR/status.log | gsed 's/.*mysql-replica-01.*\"syncerBinlog\":\"\(.*\)\",\"syncerBinlogGtid.*mysql-replica-02.*/\1/g'`
+    MASTER_BINLOG=`cat $WORK_DIR/status.log | gsed 's/.*mysql-replica-01.*\"masterBinlog\":\"\(.*\)\",\"masterBinlogGtid.*mysql-replica-02.*/\1/g'`
 
     if [ "$MASTER_BINLOG" != "$SYNCER_BINLOG" ]; then
         echo "master binlog is not equal to syncer binlog"
