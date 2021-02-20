@@ -15,11 +15,11 @@ fi
 TEST_DIR=/tmp/dm_test
 
 echo "Starting TiDB on port ${PORT}"
-bin/tidb-server \
-    -P ${PORT} \
-    --store mocktikv \
-    --config "$CONFIG" \
-    --log-file "$TEST_DIR/tidb.log" &
+# bin/tidb-server \
+#     -P ${PORT} \
+#     --store mocktikv \
+#     --config "$CONFIG" \
+#     --log-file "$TEST_DIR/tidb.log" &
 
 echo "Verifying TiDB is started..."
 i=0
