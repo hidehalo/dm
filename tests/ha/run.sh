@@ -43,8 +43,8 @@ function run() {
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
     echo "flush logs to force rotate binlog file"
-    run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "flush logs;" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "flush logs;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "flush logs;" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
     echo "apply increment data before restart dm-worker to ensure entering increment phase"
     run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1

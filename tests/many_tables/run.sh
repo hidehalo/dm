@@ -9,12 +9,12 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 TABLE_NUM=500
 
 function prepare_data() {
-    run_sql 'DROP DATABASE if exists many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql 'CREATE DATABASE many_tables_db;' $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql 'DROP DATABASE if exists many_tables_db;' $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $MYSQL_HOST1
+    run_sql 'CREATE DATABASE many_tables_db;' $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $MYSQL_HOST1
     for i in $(seq $TABLE_NUM); do
-        run_sql "CREATE TABLE many_tables_db.t$i(i TINYINT, j INT UNIQUE KEY);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+        run_sql "CREATE TABLE many_tables_db.t$i(i TINYINT, j INT UNIQUE KEY);" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $MYSQL_HOST1
         for j in $(seq 2); do
-            run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+            run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);"  $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $MYSQL_HOST1
         done
     done
 }
@@ -22,7 +22,7 @@ function prepare_data() {
 function incremental_data() {
     for j in $(seq 3 5); do
         for i in $(seq $TABLE_NUM); do
-            run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);" $MYSQL_PORT1 $MYSQL_PASSWORD1
+            run_sql "INSERT INTO many_tables_db.t$i VALUES ($j,${j}000$j),($j,${j}001$j);"  $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $MYSQL_HOST1
         done
     done
 }

@@ -8,8 +8,9 @@ master_ports=($MASTER_PORT1 $MASTER_PORT2 $MASTER_PORT3)
 worker_ports=($WORKER1_PORT $WORKER2_PORT $WORKER3_PORT $WORKER4_PORT $WORKER5_PORT)
 
 function load_data() {
-    port=$1
-    pswd=$2
+    host=${1-"127.0.0.1"}
+    port=$2
+    pswd=$3
     i=$3
     if [ $# -ge 4 ]; then
         db=$4

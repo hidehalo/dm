@@ -26,8 +26,8 @@ function test_running() {
     check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
     echo "flush logs to force rotate binlog file"
-    run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "flush logs;" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "flush logs;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "flush logs;" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
     echo "apply increment data before restart dm-worker to ensure entering increment phase"
     run_sql_file_withdb $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $ha_test
@@ -61,8 +61,8 @@ function test_multi_task_running() {
     check_sync_diff $WORK_DIR $cur/conf/diff_config_multi_task.toml
 
     echo "flush logs to force rotate binlog file"
-    run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "flush logs;" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "flush logs;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "flush logs;" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
     echo "apply increment data before restart dm-worker to ensure entering increment phase"
     run_sql_file_withdb $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $ha_test
@@ -267,8 +267,8 @@ function test_kill_master_in_sync() {
     test_running
 
     echo "start dumping SQLs into source"
-    load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
-    load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
+    load_data $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
+    load_data $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
 
     ps aux | grep dm-master1 |awk '{print $2}'|xargs kill || true
     check_port_offline $MASTER_PORT1 20
@@ -295,8 +295,8 @@ function test_kill_worker_in_sync() {
     test_running
 
     echo "start dumping SQLs into source"
-    load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
-    load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
+    load_data $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
+    load_data $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
 
     echo "kill dm-worker1"
     ps aux | grep dm-worker1 |awk '{print $2}'|xargs kill || true
@@ -347,7 +347,7 @@ function test_standalone_running() {
     check_sync_diff $WORK_DIR $cur/conf/diff-standalone-config.toml
 
     echo "flush logs to force rotate binlog file"
-    run_sql "flush logs;" $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "flush logs;" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
     echo "apply increment data before restart dm-worker to ensure entering increment phase"
     run_sql_file_withdb $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $ha_test
@@ -412,8 +412,8 @@ function test_pause_task() {
     test_multi_task_running
 
     echo "start dumping SQLs into source"
-    load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
-    load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
+    load_data $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
+    load_data $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
 
     task_name=(test test2)
     for name in ${task_name[@]}; do
@@ -466,8 +466,8 @@ function test_stop_task() {
     test_multi_task_running
 
     echo "start dumping SQLs into source"
-    load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
-    load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
+    load_data $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
+    load_data $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
 
     task_name=(test test2)
     task_config=(dm-task.yaml dm-task2.yaml)
@@ -515,10 +515,10 @@ function test_multi_task_reduce_and_restart_worker() {
     test_multi_task_running
 
     echo "start dumping SQLs into source"
-    load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
-    load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
-    load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" $ha_test2 &
-    load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" $ha_test2 &
+    load_data $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
+    load_data $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
+    load_data $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" $ha_test2 &
+    load_data $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" $ha_test2 &
     worker_ports=($WORKER1_PORT $WORKER2_PORT $WORKER3_PORT $WORKER4_PORT $WORKER5_PORT)
 
     # find which worker is in use
@@ -652,10 +652,10 @@ function test_isolate_master_and_worker() {
             "pause-task test"\
             "\"result\": true" 3
 
-    run_sql "DROP TABLE if exists $ha_test.ta;" $TIDB_PORT $TIDB_PASSWORD
-    run_sql "DROP TABLE if exists $ha_test.tb;" $TIDB_PORT $TIDB_PASSWORD
-    load_data $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
-    load_data $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
+    run_sql "DROP TABLE if exists $ha_test.ta;" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
+    run_sql "DROP TABLE if exists $ha_test.tb;" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
+    load_data $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 "a" &
+    load_data $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2 "b" &
 
     run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$new_leader_port" \
         "resume-task test"\

@@ -5,9 +5,9 @@ function cleanup_data() {
     rm -rf $WORK_DIR
     mkdir $WORK_DIR
     for target_db in "$@"; do
-        run_sql "drop database if exists \`${target_db}\`" $TIDB_PORT $TIDB_PASSWORD
+        run_sql "drop database if exists \`${target_db}\`" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     done
-    run_sql "drop database if exists dm_meta" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "drop database if exists dm_meta" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
 }
 
 function cleanup_process() {
@@ -21,8 +21,8 @@ function cleanup_process() {
 }
 
 if [ "$RESET_MASTER" = true ]; then
-    run_sql "RESET MASTER" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "RESET MASTER" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "RESET MASTER" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 
+    run_sql "RESET MASTER" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 fi
 
 function join_string() {
@@ -148,12 +148,12 @@ function run_case() {
 
 # shortcut for run sql in mysql1
 function run_sql_source1() {
-    run_sql "$1" $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "$1" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 }
 
 # shortcut for run sql in mysql2
 function run_sql_source2() {
-    run_sql "$1" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "$1" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 }
 
 # shortcut for run sql in both mysql1 and mysql2
@@ -164,7 +164,7 @@ function run_sql_both_source() {
 
 # shortcut for run tidb sql
 function run_sql_tidb() {
-    run_sql "$1" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "$1" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
 }
 
 # shortcut for run tidb sql and check result with retry

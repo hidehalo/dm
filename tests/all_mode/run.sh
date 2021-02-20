@@ -262,7 +262,7 @@ function run() {
     # check_metric $WORKER2_PORT 'dm_syncer_replication_lag{task="test"}' 3 0 2
 
     # test block-allow-list by the way
-    run_sql "show databases;" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "show databases;" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     check_not_contains "ignore_db"
     check_contains "all_mode"
 

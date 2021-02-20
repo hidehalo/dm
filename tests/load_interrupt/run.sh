@@ -25,9 +25,9 @@ function check_row_count() {
     lines=$(($(wc -l $WORK_DIR/db$index.prepare.sql|awk '{print $1}') - 4))
     # each line has two insert values
     lines=$((lines * 2))
-    run_sql "SELECT FLOOR(offset / end_pos * $lines) as cnt from dm_meta.test_loader_checkpoint where cp_table = 't$index'" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "SELECT FLOOR(offset / end_pos * $lines) as cnt from dm_meta.test_loader_checkpoint where cp_table = 't$index'" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     estimate=$(tail -n 1 "$TEST_DIR/sql_res.$TEST_NAME.txt")
-    run_sql "SELECT count(1) as cnt from $TEST_NAME.t$index" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "SELECT count(1) as cnt from $TEST_NAME.t$index" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     row_count=$(tail -n 1 "$TEST_DIR/sql_res.$TEST_NAME.txt")
     echo "estimate row count: $estimate, real row count: $row_count"
     [ "$estimate" == "$row_count" ]
@@ -61,7 +61,7 @@ function run() {
     # check dump files are generated before worker down
     ls $WORK_DIR/worker1/dumped_data.test
 
-    run_sql "SELECT count(*) from dm_meta.test_loader_checkpoint where cp_schema = '$TEST_NAME' and offset < $THRESHOLD" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "SELECT count(*) from dm_meta.test_loader_checkpoint where cp_schema = '$TEST_NAME' and offset < $THRESHOLD" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     check_contains "count(*): 1"
     # TODO: block for dumpling temporarily
     # check_row_count 1
@@ -86,7 +86,7 @@ function run() {
     # strange, TiDB (at least with mockTiKV) needs a long time to see the update of `test_loader_checkpoint`,
     # and even later txn may see the older state than the earlier txn.
     sleep 8
-    run_sql "SELECT count(*) from dm_meta.test_loader_checkpoint where cp_schema = '$TEST_NAME' and offset = end_pos" $TIDB_PORT $TIDB_PASSWORD
+    run_sql "SELECT count(*) from dm_meta.test_loader_checkpoint where cp_schema = '$TEST_NAME' and offset = end_pos" 127.0.0.1 $TIDB_PORT $TIDB_PASSWORD
     check_contains "count(*): 1"
 
     export GO_FAILPOINTS=''

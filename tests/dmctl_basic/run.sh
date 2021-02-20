@@ -70,8 +70,8 @@ function usage_and_arg_test() {
 }
 
 function recover_max_binlog_size() {
-    run_sql "set @@global.max_binlog_size = $1" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "set @@global.max_binlog_size = $2" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "set @@global.max_binlog_size = $1" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "set @@global.max_binlog_size = $2" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 }
 
 function run() {
@@ -80,12 +80,12 @@ function run() {
     )
     export GO_FAILPOINTS="$(join_string \; ${inject_points[@]})"
 
-    run_sql "show variables like 'max_binlog_size'\G" $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "show variables like 'max_binlog_size'\G" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
     max_binlog_size1=$(tail -n 1 "$TEST_DIR/sql_res.$TEST_NAME.txt" | awk '{print $NF}')
-    run_sql "show variables like 'max_binlog_size'\G" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "show variables like 'max_binlog_size'\G" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
     max_binlog_size2=$(tail -n 1 "$TEST_DIR/sql_res.$TEST_NAME.txt" | awk '{print $NF}')
-    run_sql "set @@global.max_binlog_size = 12288" $MYSQL_PORT1 $MYSQL_PASSWORD1
-    run_sql "set @@global.max_binlog_size = 12288" $MYSQL_PORT2 $MYSQL_PASSWORD2
+    run_sql "set @@global.max_binlog_size = 12288" $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+    run_sql "set @@global.max_binlog_size = 12288" $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
     trap "recover_max_binlog_size $max_binlog_size1 $max_binlog_size2" EXIT
 
     run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
