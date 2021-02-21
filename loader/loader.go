@@ -1258,6 +1258,7 @@ func (l *Loader) restoreData(ctx context.Context) error {
 				return err
 			}
 			l.logger.Info("finish to create table", zap.String("table file", tableFile))
+			l.logger.Info("all DDL tasks done", zap.Duration("cost time", time.Since(begin)))
 
 			restoringFiles := l.checkPoint.GetRestoringFileInfo(db, table)
 			l.logger.Debug("restoring table data", zap.String("schema", db), zap.String("table", table), zap.Reflect("data files", restoringFiles))
