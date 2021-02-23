@@ -1188,8 +1188,103 @@ func fetchMatchedLiteral(ctx *tcontext.Context, router *router.Table, schema, ta
 	return targetSchema, targetTable
 }
 
+type restoreSchemaJob struct {
+	database         string
+	table            string
+	pathOfSchemaFile string
+}
+
+func (job *restoreSchemaJob) isSchemaOfDatabase() (yes bool) {
+	yes = (job.table == "")
+	return
+}
+
+func (job *restoreSchemaJob) isSchemaOfTable() (yes bool) {
+	yes = (job.table != "")
+	return
+}
+
+type schemaRestorer struct {
+	context context.Context
+	loader  *Loader
+	conn    *DBConn
+	ddlWg   sync.WaitGroup
+	jobCh   chan *restoreSchemaJob
+	errCh   chan error
+}
+
+func newSchemaRestorer(context context.Context, loader *Loader, conn *DBConn) *schemaRestorer {
+	return &schemaRestorer{
+		context: context,
+		loader:  loader,
+		conn:    conn,
+		jobCh:   make(chan *restoreSchemaJob, 1),
+		errCh:   make(chan error),
+	}
+}
+
+func (restorer *schemaRestorer) sendJob(job *restoreSchemaJob) error {
+	restorer.ddlWg.Add(1) // initialization before goroutine
+	select {
+	case <-restorer.context.Done():
+		restorer.ddlWg.Done() // cancel
+		return restorer.context.Err()
+	case err := <-restorer.errCh:
+		restorer.ddlWg.Done() // cacel
+		return err
+	case restorer.jobCh <- job:
+		return nil
+	}
+}
+
+func (restorer *schemaRestorer) run() {
+	for {
+		select {
+		case <-restorer.context.Done():
+			return
+		case <-restorer.errCh:
+			return
+		case job := <-restorer.jobCh:
+			if job == nil {
+				return
+			}
+			// TODO: doning job
+		}
+	}
+}
+
+func (restorer *schemaRestorer) throwError(err error) {
+	select {
+	case <-restorer.context.Done():
+	case restorer.errCh <- err:
+	}
+}
+
+func (restorer *schemaRestorer) wait() error {
+	waitFn := func() chan struct{} {
+		waitCh := make(chan struct{})
+		defer func() {
+			restorer.ddlWg.Wait()
+			close(waitCh)
+		}()
+		return waitCh
+	}
+	select {
+	case <-restorer.context.Done():
+		return restorer.context.Err()
+	case err := <-restorer.errCh:
+		return err
+	case <-waitFn():
+		return nil
+	}
+}
+
+func (restorer *schemaRestorer) close() {
+	close(restorer.jobCh)
+}
+
 func (l *Loader) restoreData(ctx context.Context) error {
-	begin := time.Now()
+	// begin := time.Now()
 
 	baseConn, err := l.toDB.GetBaseConn(ctx)
 	if err != nil {
@@ -1209,9 +1304,9 @@ func (l *Loader) restoreData(ctx context.Context) error {
 			return nil, terror.ErrDBBadConn.Generate("bad connection error restoreData")
 		},
 	}
+	// dispatchMap := make(map[string]*fileJob)
 
-	dispatchMap := make(map[string]*fileJob)
-
+	schemaRestorer := newSchemaRestorer(ctx, l, dbConn)
 	// restore db in sort
 	dbs := make([]string, 0, len(l.db2Tables))
 	for db := range l.db2Tables {
@@ -1220,90 +1315,148 @@ func (l *Loader) restoreData(ctx context.Context) error {
 
 	tctx := tcontext.NewContext(ctx, l.logger)
 
-	for _, db := range dbs {
-		tables := l.db2Tables[db]
+	go schemaRestorer.run()
 
+	for _, db := range dbs {
 		// create db
 		dbFile := fmt.Sprintf("%s/%s-schema-create.sql", l.cfg.Dir, db)
-		l.logger.Info("start to create schema", zap.String("schema file", dbFile))
-		err = l.restoreSchema(ctx, dbConn, dbFile, db)
+		err = schemaRestorer.sendJob(&restoreSchemaJob{
+			database:         db,
+			table:            "",
+			pathOfSchemaFile: dbFile,
+		})
 		if err != nil {
-			return err
+			schemaRestorer.close()
+			return terror.Annotate(err, "")
 		}
-		l.logger.Info("finish to create schema", zap.String("schema file", dbFile))
+	}
+	err = schemaRestorer.wait()
+	if err != nil {
+		schemaRestorer.close()
+		return terror.Annotate(err, "")
+	}
 
+	for _, db := range dbs {
+		tables := l.db2Tables[db]
 		tnames := make([]string, 0, len(tables))
 		for t := range tables {
 			tnames = append(tnames, t)
 		}
 		for _, table := range tnames {
-			dataFiles := tables[table]
-			tableFile := fmt.Sprintf("%s/%s.%s-schema.sql", l.cfg.Dir, db, table)
+			tableFile := l.cfg.Dir + "/" + db + "." + table + "-schema.sql"
 			if _, ok := l.tableInfos[tableName(db, table)]; !ok {
 				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, tableFile, l.cfg.LoaderConfig.SQLMode)
 				if err != nil {
+					schemaRestorer.close()
 					return terror.Annotatef(err, "parse table %s/%s", db, table)
 				}
 			}
-
 			if l.checkPoint.IsTableFinished(db, table) {
 				l.logger.Info("table has finished, skip it.", zap.String("schema", db), zap.String("table", table))
 				continue
 			}
 
-			// create table
-			l.logger.Info("start to create table", zap.String("table file", tableFile))
-			err := l.restoreTable(ctx, dbConn, tableFile, db, table)
+			err = schemaRestorer.sendJob(&restoreSchemaJob{
+				database:         db,
+				table:            table,
+				pathOfSchemaFile: tableFile,
+			})
 			if err != nil {
-				return err
-			}
-			l.logger.Info("finish to create table", zap.String("table file", tableFile))
-
-			restoringFiles := l.checkPoint.GetRestoringFileInfo(db, table)
-			l.logger.Debug("restoring table data", zap.String("schema", db), zap.String("table", table), zap.Reflect("data files", restoringFiles))
-
-			info := l.tableInfos[tableName(db, table)]
-			for _, file := range dataFiles {
-				select {
-				case <-ctx.Done():
-					l.logger.Warn("stop generate data file job", log.ShortError(ctx.Err()))
-					return ctx.Err()
-				default:
-					// do nothing
-				}
-
-				l.logger.Debug("dispatch data file", zap.String("schema", db), zap.String("table", table), zap.String("data file", file))
-
-				offset := int64(uninitializedOffset)
-				posSet, ok := restoringFiles[file]
-				if ok {
-					offset = posSet[0]
-				}
-
-				j := &fileJob{
-					schema:   db,
-					table:    table,
-					dataFile: file,
-					offset:   offset,
-					info:     info,
-				}
-				dispatchMap[fmt.Sprintf("%s_%s_%s", db, table, file)] = j
+				schemaRestorer.close()
+				return terror.Annotate(err, "")
 			}
 		}
 	}
-	l.logger.Info("finish to create tables", zap.Duration("cost time", time.Since(begin)))
-
-	// a simple and naive approach to dispatch files randomly based on the feature of golang map(range by random)
-	for _, j := range dispatchMap {
-		select {
-		case <-ctx.Done():
-			l.logger.Warn("stop dispatch data file job", log.ShortError(ctx.Err()))
-			return ctx.Err()
-		case l.fileJobQueue <- j:
-		}
+	err = schemaRestorer.wait()
+	schemaRestorer.close()
+	if err != nil {
+		return terror.Annotate(err, "")
 	}
 
-	l.logger.Info("all data files have been dispatched, waiting for them finished")
+	// for _, db := range dbs {
+	// 	tables := l.db2Tables[db]
+
+	// 	// create db
+	// 	dbFile := fmt.Sprintf("%s/%s-schema-create.sql", l.cfg.Dir, db)
+	// 	l.logger.Info("start to create schema", zap.String("schema file", dbFile))
+	// 	err = l.restoreSchema(ctx, dbConn, dbFile, db)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	l.logger.Info("finish to create schema", zap.String("schema file", dbFile))
+
+	// 	tnames := make([]string, 0, len(tables))
+	// 	for t := range tables {
+	// 		tnames = append(tnames, t)
+	// 	}
+	// 	for _, table := range tnames {
+	// 		dataFiles := tables[table]
+	// 		tableFile := fmt.Sprintf("%s/%s.%s-schema.sql", l.cfg.Dir, db, table)
+	// 		if _, ok := l.tableInfos[tableName(db, table)]; !ok {
+	// 			l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, tableFile, l.cfg.LoaderConfig.SQLMode)
+	// 			if err != nil {
+	// 				return terror.Annotatef(err, "parse table %s/%s", db, table)
+	// 			}
+	// 		}
+
+	// 		if l.checkPoint.IsTableFinished(db, table) {
+	// 			l.logger.Info("table has finished, skip it.", zap.String("schema", db), zap.String("table", table))
+	// 			continue
+	// 		}
+
+	// 		// create table
+	// 		l.logger.Info("start to create table", zap.String("table file", tableFile))
+	// 		err := l.restoreTable(ctx, dbConn, tableFile, db, table)
+	// 		if err != nil {
+	// 			return err
+	// 		}
+	// 		l.logger.Info("finish to create table", zap.String("table file", tableFile))
+
+	// 		restoringFiles := l.checkPoint.GetRestoringFileInfo(db, table)
+	// 		l.logger.Debug("restoring table data", zap.String("schema", db), zap.String("table", table), zap.Reflect("data files", restoringFiles))
+
+	// 		info := l.tableInfos[tableName(db, table)]
+	// 		for _, file := range dataFiles {
+	// 			select {
+	// 			case <-ctx.Done():
+	// 				l.logger.Warn("stop generate data file job", log.ShortError(ctx.Err()))
+	// 				return ctx.Err()
+	// 			default:
+	// 				// do nothing
+	// 			}
+
+	// 			l.logger.Debug("dispatch data file", zap.String("schema", db), zap.String("table", table), zap.String("data file", file))
+
+	// 			offset := int64(uninitializedOffset)
+	// 			posSet, ok := restoringFiles[file]
+	// 			if ok {
+	// 				offset = posSet[0]
+	// 			}
+
+	// 			j := &fileJob{
+	// 				schema:   db,
+	// 				table:    table,
+	// 				dataFile: file,
+	// 				offset:   offset,
+	// 				info:     info,
+	// 			}
+	// 			dispatchMap[fmt.Sprintf("%s_%s_%s", db, table, file)] = j
+	// 		}
+	// 	}
+	// }
+	// l.logger.Info("finish to create tables", zap.Duration("cost time", time.Since(begin)))
+
+	// // a simple and naive approach to dispatch files randomly based on the feature of golang map(range by random)
+	// for _, j := range dispatchMap {
+	// 	select {
+	// 	case <-ctx.Done():
+	// 		l.logger.Warn("stop dispatch data file job", log.ShortError(ctx.Err()))
+	// 		return ctx.Err()
+	// 	case l.fileJobQueue <- j:
+	// 	}
+	// }
+
+	// l.logger.Info("all data files have been dispatched, waiting for them finished")
 	return nil
 }
 
