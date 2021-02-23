@@ -6,7 +6,7 @@ cur=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source $cur/../_utils/test_prepare
 
 WORK_DIR=$TEST_DIR/$TEST_NAME
-TABLE_NUM=500
+TABLE_NUM=5
 
 function prepare_data() {
     run_sql 'DROP DATABASE if exists many_tables_db;' $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1 $MYSQL_HOST1
