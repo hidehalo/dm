@@ -1189,8 +1189,10 @@ func fetchMatchedLiteral(ctx *tcontext.Context, router *router.Table, schema, ta
 }
 
 type restoreSchemaJob struct {
+	loader           *Loader
+	session          *DBConn
 	database         string
-	table            string
+	table            string // empty if it's a schema of database
 	pathOfSchemaFile string
 }
 
@@ -1204,83 +1206,161 @@ func (job *restoreSchemaJob) isSchemaOfTable() (yes bool) {
 	return
 }
 
-type schemaRestorer struct {
-	context context.Context
-	loader  *Loader
-	conn    *DBConn
-	ddlWg   sync.WaitGroup
-	jobCh   chan *restoreSchemaJob
-	errCh   chan error
+type jobQueue struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+	msgq   chan *restoreSchemaJob
+	closed bool         // msgq closed flag
+	lock   sync.RWMutex // rwlock of msgq closed
+	err    chan error
 }
 
-func newSchemaRestorer(context context.Context, loader *Loader, conn *DBConn) *schemaRestorer {
-	return &schemaRestorer{
-		context: context,
-		loader:  loader,
-		conn:    conn,
-		jobCh:   make(chan *restoreSchemaJob, 1),
-		errCh:   make(chan error),
+func newJobQueue(ctx context.Context) *jobQueue {
+	selfCtx, cancel := context.WithCancel(ctx)
+	return &jobQueue{
+		ctx:    selfCtx,
+		cancel: cancel,
+		msgq:   make(chan *restoreSchemaJob, 1),
+		err:    make(chan error),
+		closed: false,
 	}
 }
 
-func (restorer *schemaRestorer) sendJob(job *restoreSchemaJob) error {
-	restorer.ddlWg.Add(1) // initialization before goroutine
-	select {
-	case <-restorer.context.Done():
-		restorer.ddlWg.Done() // cancel
-		return restorer.context.Err()
-	case err := <-restorer.errCh:
-		restorer.ddlWg.Done() // cacel
-		return err
-	case restorer.jobCh <- job:
-		return nil
-	}
-}
-
-func (restorer *schemaRestorer) run() {
-	for {
+// -> err
+// <- done
+func (q *jobQueue) broke(err error) {
+	if !q.isClosed() {
 		select {
-		case <-restorer.context.Done():
-			return
-		case <-restorer.errCh:
-			return
-		case job := <-restorer.jobCh:
-			if job == nil {
-				return
-			}
-			// TODO: doning job
+		case <-q.ctx.Done():
+		case q.err <- err:
+			fmt.Println("queue was broken")
 		}
 	}
 }
 
-func (restorer *schemaRestorer) throwError(err error) {
+// -> msg
+// <- done/err
+func (q *jobQueue) push(job *restoreSchemaJob) error {
+	q.lock.RLock()
+	defer q.lock.RUnlock() // avoid send to closed channel
+
+	var err error
+	if !q.closed {
+		q.wg.Add(1)
+		select {
+		case <-q.ctx.Done():
+			// cancel job
+			err = q.ctx.Err()
+			q.wg.Done()
+		case err = <-q.err:
+			// cancel job
+			q.wg.Done()
+		case q.msgq <- job:
+		}
+	}
+
+	return err
+}
+
+func (q *jobQueue) run() error {
+	waitCh := make(chan struct{})
+	go func() {
+		q.wg.Wait()
+		close(waitCh)
+	}()
+	var err error
 	select {
-	case <-restorer.context.Done():
-	case restorer.errCh <- err:
+	case <-q.ctx.Done():
+		err = q.ctx.Err()
+	case err = <-q.err:
+	case <-waitCh:
+	}
+	return err
+}
+
+// -> msgq
+func (q *jobQueue) close() {
+	if !q.isClosed() {
+		q.lock.Lock()
+		q.closed = true
+		// queue is closeing
+		close(q.msgq)
+		q.cancel()
+		q.lock.Unlock()
+		// queue was closed
 	}
 }
 
-func (restorer *schemaRestorer) wait() error {
-	waitFn := func() chan struct{} {
-		waitCh := make(chan struct{})
-		defer func() {
-			restorer.ddlWg.Wait()
-			close(waitCh)
-		}()
-		return waitCh
-	}
-	select {
-	case <-restorer.context.Done():
-		return restorer.context.Err()
-	case err := <-restorer.errCh:
-		return err
-	case <-waitFn():
-		return nil
+func (q *jobQueue) isClosed() bool {
+	q.lock.RLock()
+	defer q.lock.RUnlock()
+	return q.closed
+}
+
+type schemaRestorer struct {
+	loader  *Loader
+	conn    *DBConn
+	q       *jobQueue
+	running sync.Mutex
+}
+
+func newSchemaRestorer(loader *Loader, conn *DBConn, queue *jobQueue) *schemaRestorer {
+	return &schemaRestorer{
+		loader: loader,
+		conn:   conn,
+		q:      queue,
 	}
 }
 
-func (restorer *schemaRestorer) close() {
-	close(restorer.jobCh)
+func (restore *schemaRestorer) run(handler func(ctx context.Context, job *restoreSchemaJob) error) {
+	// loop of consumption is running
+	restore.running.Lock()
+	defer restore.running.Unlock()
+
+	if !restore.q.isClosed() {
+		var err error
+	consumeLoop:
+		for {
+			select {
+			case <-restore.q.ctx.Done():
+				break consumeLoop
+			case job := <-restore.q.msgq:
+				if job == nil {
+					break consumeLoop
+				}
+				err = handler(restore.q.ctx, job)
+				if err != nil {
+					break consumeLoop
+				}
+				restore.q.wg.Done()
+			}
+		}
+
+		if err != nil {
+			restore.q.broke(err)
+			restore.q.wg.Done()
+		}
+
+		for range restore.q.msgq {
+			// cancel job
+			restore.q.wg.Done()
+		}
+	}
+	// loop of consumption wwas finished
+}
+
+func (restore *schemaRestorer) close() {
+	waitCh := make(chan struct{})
+	go func() {
+		defer restore.running.Unlock()
+		restore.running.Lock()
+		close(waitCh)
+	}()
+	select {
+	case <-restore.q.ctx.Done():
+	case <-waitCh:
+	}
 }
 
 func (l *Loader) restoreData(ctx context.Context) error {
@@ -1305,37 +1385,54 @@ func (l *Loader) restoreData(ctx context.Context) error {
 		},
 	}
 	// dispatchMap := make(map[string]*fileJob)
+	schemaJobQueue := newJobQueue(ctx)
+	concurrency := 8 // how to set up?
+	schemaRestorers := make([]*schemaRestorer, 0, concurrency)
+	schemaJobHandler := func(ctx context.Context, job *restoreSchemaJob) error {
+		return nil
+	}
+	closeSchemaRestorers := func(restorers []*schemaRestorer) {
+		for _, restorer := range restorers {
+			restorer.close()
+		}
+	}
+	for i := 0; i < concurrency; i++ {
+		schemaRestorers = append(schemaRestorers, newSchemaRestorer(l, dbConn, schemaJobQueue))
+		go schemaRestorers[i].run(schemaJobHandler)
+	}
 
-	schemaRestorer := newSchemaRestorer(ctx, l, dbConn)
 	// restore db in sort
 	dbs := make([]string, 0, len(l.db2Tables))
 	for db := range l.db2Tables {
 		dbs = append(dbs, db)
 	}
-
 	tctx := tcontext.NewContext(ctx, l.logger)
-
-	go schemaRestorer.run()
-
 	for _, db := range dbs {
 		// create db
 		dbFile := fmt.Sprintf("%s/%s-schema-create.sql", l.cfg.Dir, db)
-		err = schemaRestorer.sendJob(&restoreSchemaJob{
+		if schemaJobQueue.isClosed() {
+			break
+		}
+		err = schemaJobQueue.push(&restoreSchemaJob{
 			database:         db,
 			table:            "",
 			pathOfSchemaFile: dbFile,
 		})
 		if err != nil {
-			schemaRestorer.close()
-			return terror.Annotate(err, "")
+			schemaJobQueue.broke(err)
+			break
 		}
 	}
-	err = schemaRestorer.wait()
 	if err != nil {
-		schemaRestorer.close()
-		return terror.Annotate(err, "")
+		return err
+	}
+	err = schemaJobQueue.run()
+	if err != nil {
+		closeSchemaRestorers(schemaRestorers)
+		return err
 	}
 
+tblSchemaLoop:
 	for _, db := range dbs {
 		tables := l.db2Tables[db]
 		tnames := make([]string, 0, len(tables))
@@ -1347,30 +1444,35 @@ func (l *Loader) restoreData(ctx context.Context) error {
 			if _, ok := l.tableInfos[tableName(db, table)]; !ok {
 				l.tableInfos[tableName(db, table)], err = parseTable(tctx, l.tableRouter, db, table, tableFile, l.cfg.LoaderConfig.SQLMode)
 				if err != nil {
-					schemaRestorer.close()
-					return terror.Annotatef(err, "parse table %s/%s", db, table)
+					schemaJobQueue.broke(err)
+					break tblSchemaLoop
+					// return terror.Annotatef(err, "parse table %s/%s", db, table)
 				}
 			}
 			if l.checkPoint.IsTableFinished(db, table) {
 				l.logger.Info("table has finished, skip it.", zap.String("schema", db), zap.String("table", table))
 				continue
 			}
-
-			err = schemaRestorer.sendJob(&restoreSchemaJob{
+			if schemaJobQueue.isClosed() {
+				break tblSchemaLoop
+			}
+			err = schemaJobQueue.push(&restoreSchemaJob{
 				database:         db,
 				table:            table,
 				pathOfSchemaFile: tableFile,
 			})
 			if err != nil {
-				schemaRestorer.close()
-				return terror.Annotate(err, "")
+				schemaJobQueue.broke(err)
+				break tblSchemaLoop
+				// return terror.Annotate(err, "")
 			}
 		}
 	}
-	err = schemaRestorer.wait()
-	schemaRestorer.close()
+	err = schemaJobQueue.run()
+	schemaJobQueue.close()
 	if err != nil {
-		return terror.Annotate(err, "")
+		closeSchemaRestorers(schemaRestorers)
+		return err
 	}
 
 	// for _, db := range dbs {
