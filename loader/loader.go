@@ -1411,6 +1411,7 @@ func (l *Loader) restoreData(ctx context.Context) error {
 			break
 		}
 		// lazy open database connection
+		dbSessionID %= concurrency
 		if dbSessionID == len(dbSessionPool) {
 			baseConn, err := l.toDB.GetBaseConn(ctx)
 			if err != nil {
@@ -1455,6 +1456,7 @@ func (l *Loader) restoreData(ctx context.Context) error {
 	// restore table schema
 tblSchemaLoop:
 	for dbSessionID, db := range dbs {
+		dbSessionID %= concurrency
 		for table := range l.db2Tables[db] {
 			schemaFile := l.cfg.Dir + "/" + db + "." + table + "-schema.sql" // cache friendly
 			if _, ok := l.tableInfos[tableName(db, table)]; !ok {
