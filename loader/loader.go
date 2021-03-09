@@ -1445,12 +1445,14 @@ func (l *Loader) restoreData(ctx context.Context) error {
 	if err != nil {
 		schemaJobQueue.close()
 		closeSchemaRestorers(schemaRestorers)
+		schemaJobQueue.eg.Wait()
 		return err
 	}
 	err = schemaJobQueue.run()
 	if err != nil {
 		schemaJobQueue.close()
 		closeSchemaRestorers(schemaRestorers)
+		schemaJobQueue.eg.Wait()
 		return err
 	}
 	// restore table schema
@@ -1488,6 +1490,7 @@ tblSchemaLoop:
 	if err != nil {
 		schemaJobQueue.close()
 		closeSchemaRestorers(schemaRestorers)
+		schemaJobQueue.eg.Wait()
 		return err
 	}
 	schemaJobQueue.close()
