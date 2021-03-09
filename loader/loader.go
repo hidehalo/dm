@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/dm/pkg/log"
 	"github.com/pingcap/dm/pkg/terror"
 	"github.com/pingcap/dm/pkg/utils"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -1198,49 +1199,36 @@ type restoreSchemaJob struct {
 }
 
 // check is schema of database
-func (job *restoreSchemaJob) isSchemaOfDatabase() (yes bool) {
+func (job *restoreSchemaJob) isDB() (yes bool) {
 	yes = (job.table == "")
 	return
 }
 
 // check is schema of table
-func (job *restoreSchemaJob) isSchemaOfTable() (yes bool) {
-	yes = (job.table != "")
+func (job *restoreSchemaJob) isTable() (yes bool) {
+	yes = !job.isDB()
 	return
 }
 
 // job queue of schema restoring
 type jobQueue struct {
 	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	msgq   chan *restoreSchemaJob
-	closed bool         // msgq closed flag
-	lock   sync.RWMutex // rwlock of `closed`
-	err    chan error
+	wg     sync.WaitGroup         // wait group of job
+	msgq   chan *restoreSchemaJob // job message queue channel
+	closed bool                   // msgq closed flag
+	lock   sync.RWMutex           // rwlock of `closed`
+
+	eg *errgroup.Group // err wait group of consumers
 }
 
 // `newJobQueue` consturct a jobQueue
 func newJobQueue(ctx context.Context) *jobQueue {
-	selfCtx, cancel := context.WithCancel(ctx)
+	eg, selfCtx := errgroup.WithContext(ctx)
 	return &jobQueue{
 		ctx:    selfCtx,
-		cancel: cancel,
 		msgq:   make(chan *restoreSchemaJob, 1),
-		err:    make(chan error),
 		closed: false,
-	}
-}
-
-// broke job queue
-// -> err
-// <- done
-func (q *jobQueue) broke(err error) {
-	if !q.isClosed() {
-		select {
-		case <-q.ctx.Done():
-		case q.err <- err:
-		}
+		eg:     eg,
 	}
 }
 
@@ -1258,9 +1246,6 @@ func (q *jobQueue) push(job *restoreSchemaJob) error {
 		case <-q.ctx.Done():
 			// cancel job
 			err = q.ctx.Err()
-			q.wg.Done()
-		case err = <-q.err:
-			// cancel job
 			q.wg.Done()
 		case q.msgq <- job:
 		}
@@ -1281,7 +1266,6 @@ func (q *jobQueue) run() error {
 	select {
 	case <-q.ctx.Done():
 		err = q.ctx.Err()
-	case err = <-q.err:
 	case <-waitCh:
 	}
 	return err
@@ -1295,7 +1279,6 @@ func (q *jobQueue) close() {
 		q.closed = true
 		// queue is closeing
 		close(q.msgq)
-		q.cancel()
 		q.lock.Unlock()
 	}
 }
@@ -1323,39 +1306,37 @@ func newSchemaRestorer(loader *Loader, queue *jobQueue) *schemaRestorer {
 }
 
 // run a loop of job consumption
-func (restore *schemaRestorer) run(handler func(ctx context.Context, job *restoreSchemaJob) error) {
+func (restore *schemaRestorer) run(handler func(ctx context.Context, job *restoreSchemaJob) error) error {
 	restore.running.Lock()
-	defer restore.running.Unlock()
+	defer func() {
+		// cancel jobs
+		for range restore.q.msgq {
+			restore.q.wg.Done()
+		}
+		restore.running.Unlock()
+	}()
 
+	var err error
 	if !restore.q.isClosed() {
-		var err error
 	consumeLoop:
 		for {
 			select {
 			case <-restore.q.ctx.Done():
+				err = restore.q.ctx.Err()
 				break consumeLoop
 			case job := <-restore.q.msgq:
 				if job == nil {
 					break consumeLoop
 				}
 				err = handler(restore.q.ctx, job)
+				restore.q.wg.Done()
 				if err != nil {
 					break consumeLoop
 				}
-				restore.q.wg.Done()
 			}
 		}
-
-		if err != nil {
-			restore.q.broke(err)
-			restore.q.wg.Done()
-		}
-
-		for range restore.q.msgq {
-			// cancel job
-			restore.q.wg.Done()
-		}
 	}
+	return err
 }
 
 // close `schemaRestorer`, wait for consume loop exit
@@ -1381,14 +1362,14 @@ func (l *Loader) restoreData(ctx context.Context) error {
 
 	// function of db/table schema restoring
 	schemaJobHandler := func(ctx context.Context, job *restoreSchemaJob) error {
-		if job.isSchemaOfDatabase() { // restore database schema
+		if job.isDB() { // restore database schema
 			job.loader.logger.Info("start to create schema", zap.String("schema file", job.pathOfSchemaFile))
 			err := job.loader.restoreSchema(ctx, job.session, job.pathOfSchemaFile, job.database)
 			if err != nil {
 				return err
 			}
 			job.loader.logger.Info("finish to create schema", zap.String("schema file", job.pathOfSchemaFile))
-		} else if job.isSchemaOfTable() { // restore table schema
+		} else if job.isTable() { // restore table schema
 			job.loader.logger.Info("start to create table", zap.String("table file", job.pathOfSchemaFile))
 			err := job.loader.restoreTable(ctx, job.session, job.pathOfSchemaFile, job.database, job.table)
 			if err != nil {
@@ -1409,8 +1390,9 @@ func (l *Loader) restoreData(ctx context.Context) error {
 
 	// run schemaRestorer concurrently
 	for i := 0; i < concurrency; i++ {
-		schemaRestorers = append(schemaRestorers, newSchemaRestorer(l, schemaJobQueue))
-		go schemaRestorers[i].run(schemaJobHandler)
+		restorer := newSchemaRestorer(l, schemaJobQueue)
+		schemaRestorers = append(schemaRestorers, restorer)
+		schemaJobQueue.eg.Go(func() error { return restorer.run(schemaJobHandler) })
 	}
 
 	// `for v := range map` would present random order
@@ -1470,7 +1452,6 @@ func (l *Loader) restoreData(ctx context.Context) error {
 		closeSchemaRestorers(schemaRestorers)
 		return err
 	}
-
 	// restore table schema
 tblSchemaLoop:
 	for dbSessionID, db := range dbs {
@@ -1507,9 +1488,9 @@ tblSchemaLoop:
 		closeSchemaRestorers(schemaRestorers)
 		return err
 	}
-	err = schemaJobQueue.run()
 	schemaJobQueue.close()
 	closeSchemaRestorers(schemaRestorers)
+	err = schemaJobQueue.eg.Wait()
 	if err != nil {
 		return err
 	}
