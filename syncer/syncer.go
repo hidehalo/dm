@@ -109,8 +109,8 @@ type Syncer struct {
 	streamerController *StreamerController
 	enableRelay        bool
 
-	wg    sync.WaitGroup
-	jobWg sync.WaitGroup
+	wg    sync.WaitGroup // wait group of syncer's sub tasks eg: sync syncDDL etc
+	jobWg sync.WaitGroup // wait group of sync sql jobs
 
 	schemaTracker *schema.Tracker
 
@@ -125,6 +125,7 @@ type Syncer struct {
 	jobsClosed         atomic.Bool
 	jobsChanLock       sync.Mutex
 	queueBucketMapping []string
+	checkPointChan     chan *checkPointJob
 	flushBarrier       *flushBarrier
 	c                  *causality
 
@@ -368,7 +369,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	rollbackHolder.Add(fr.FuncRollback{Name: "remove-active-realylog", Fn: s.removeActiveRelayLog})
 
 	s.flushBarrier = &flushBarrier{}
-
+	s.checkPointChan = make(chan *checkPointJob, 1)
 	s.reset()
 	return nil
 }
@@ -450,6 +451,11 @@ func (s *Syncer) reset() {
 	case config.ShardOptimistic:
 		s.optimist.Reset()
 	}
+
+	if s.checkPointChan != nil {
+		close(s.checkPointChan)
+	}
+	s.checkPointChan = make(chan *checkPointJob, 1)
 }
 
 func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
@@ -514,6 +520,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	)
 
 	var wg sync.WaitGroup
+	// start a go-routine for error collecting
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -529,7 +536,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			errsMu.Unlock()
 		}
 	}()
-
+	// start a go-routine for listen context done signal
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -776,10 +783,13 @@ func (s *Syncer) addJob(job *job) error {
 		return nil
 	case ddl:
 		s.jobWg.Wait()
+		s.c.reset()
 		addedJobsTotal.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Inc()
 		s.jobWg.Add(1)
 		queueBucket = s.cfg.WorkerCount
 		startTime := time.Now()
+		job.checkPointJob = newCheckPointJob(job)
+		s.checkPointChan <- job.checkPointJob
 		s.jobs[queueBucket] <- job
 		addJobDurationHistogram.WithLabelValues("ddl", s.cfg.Name, adminQueueName, s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 		s.tctx.L().Debug("job enqueued", zap.String("type", job.tp.String()))
@@ -789,49 +799,51 @@ func (s *Syncer) addJob(job *job) error {
 		s.addCount(false, s.queueBucketMapping[queueBucket], job.tp, 1)
 		startTime := time.Now()
 		s.tctx.L().Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", job.key))
+		job.checkPointJob = newCheckPointJob(job)
+		s.checkPointChan <- job.checkPointJob
 		s.jobs[queueBucket] <- job
 		addJobDurationHistogram.WithLabelValues(job.tp.String(), s.cfg.Name, s.queueBucketMapping[queueBucket], s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 		s.tctx.L().Debug("job enqueued", zap.String("type", job.tp.String()))
 	}
 
-	// nolint:ifshort
-	cleanAndFlush := (job.tp == ddl || s.checkpoint.CheckGlobalPoint())
-	if cleanAndFlush {
-		s.jobWg.Wait()
-		s.c.reset()
-	}
+	// // nolint:ifshort
+	// cleanAndFlush := (job.tp == ddl || s.checkpoint.CheckGlobalPoint())
+	// if cleanAndFlush {
+	// 	s.jobWg.Wait()
+	// 	s.c.reset()
+	// }
 
-	// check error of job execution once
-	if s.execError.Load() != nil {
-		// nolint:nilerr
-		return nil
-	}
+	// // check error of job execution once
+	// if s.execError.Load() != nil {
+	// 	// nolint:nilerr
+	// 	return nil
+	// }
 
-	// we don't save checkpoints in memory when `sync` called cause we need save checkpoints in order.
-	// but we may save checkpoint too early & block main thread for a while maybe?
-	// if it need to change, we could start a go-routine handle it with a buffered channel
-	switch job.tp {
-	case ddl:
-		s.saveCheckPointAfterDDL(job)
-	case insert, update, del:
-		s.saveCheckPointAfterDML(job)
-	}
+	// // we don't save checkpoints in memory when `sync` called cause we need save checkpoints in order.
+	// // but we may save checkpoint too early & block main thread for a while maybe?
+	// // if it need to change, we could start a go-routine handle it with a buffered channel
+	// switch job.tp {
+	// case ddl:
+	// 	s.saveCheckPointAfterDDL(job)
+	// case insert, update, del:
+	// 	s.saveCheckPointAfterDML(job)
+	// }
 
-	// interrupted after executed DDL and before save checkpoint.
-	failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
-		s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
-		utils.OsExit(1)
-	})
-	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
-		err := handleFlushCheckpointStage(3, val.(int), "before save checkpoint")
-		if err != nil {
-			failpoint.Return(err)
-		}
-	})
+	// // interrupted after executed DDL and before save checkpoint.
+	// failpoint.Inject("ExitAfterDDLBeforeFlush", func() {
+	// 	s.tctx.L().Warn("exit triggered", zap.String("failpoint", "ExitAfterDDLBeforeFlush"))
+	// 	utils.OsExit(1)
+	// })
+	// failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+	// 	err := handleFlushCheckpointStage(3, val.(int), "before save checkpoint")
+	// 	if err != nil {
+	// 		failpoint.Return(err)
+	// 	}
+	// })
 
-	if cleanAndFlush {
-		return s.flushCheckPoints()
-	}
+	// if cleanAndFlush {
+	// 	return s.flushCheckPoints()
+	// }
 	return nil
 }
 
@@ -937,6 +949,58 @@ func (fb *flushBarrier) release() {
 	fb.flushing = false
 }
 
+type checkPointJob struct {
+	syncJob *job
+	promise chan int
+}
+
+func newCheckPointJob(syncJob *job) *checkPointJob {
+	return &checkPointJob{
+		syncJob: syncJob,
+		promise: make(chan int, 1),
+	}
+}
+
+func (j *checkPointJob) fulfill() {
+	j.promise <- 0
+}
+
+func (j *checkPointJob) cancel() {
+	j.promise <- 1
+}
+
+func (s *Syncer) asyncHandleCheckPointLoop() {
+	defer s.wg.Done()
+	s.wg.Add(1)
+	var promised int
+	for {
+		checkPointJob, active := <-s.checkPointChan
+		if !active {
+			return
+		}
+		select {
+		case <-s.tctx.Ctx.Done():
+			return
+		case promised = <-checkPointJob.promise:
+		}
+		if promised == 0 {
+			switch checkPointJob.syncJob.tp {
+			case ddl:
+				s.saveCheckPointAfterDDL(checkPointJob.syncJob)
+			case insert, update, del:
+				s.saveCheckPointAfterDML(checkPointJob.syncJob)
+			case flush:
+				err := s.flushCheckPoints()
+				s.flushBarrier.release()
+				if err != nil {
+					s.sendRunFatal(checkPointJob.syncJob.startLocation, checkPointJob.syncJob.currentLocation, false, "", err)
+					continue
+				}
+			}
+		}
+	}
+}
+
 func (s *Syncer) sendRunFatal(start, end binlog.Location, isQueryEvent bool, sql string, err error) {
 	s.execError.Store(err)
 	if !utils.IsContextCanceledError(err) {
@@ -987,7 +1051,6 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *DBConn,
 				err = s.handleSpecialDDLError(tctx, err, sqlJob.ddls, affected, db)
 				err = terror.WithScope(err, terror.ScopeDownstream)
 			}
-			// s.saveCheckPointAfterDDL(sqlJob)
 		}
 
 		failpoint.Label("bypass")
@@ -996,6 +1059,7 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *DBConn,
 		// this job, set `s.execError` to let caller of `addJob` discover error
 		if err != nil {
 			s.sendRunFatal(sqlJob.startLocation, sqlJob.currentLocation, true, sqlJob.originSQL, err)
+			sqlJob.checkPointJob.cancel()
 			s.jobWg.Done()
 			continue
 		}
@@ -1030,11 +1094,13 @@ func (s *Syncer) syncDDL(tctx *tcontext.Context, queueBucket string, db *DBConn,
 		}
 		if err != nil {
 			s.sendRunFatal(sqlJob.startLocation, sqlJob.currentLocation, true, sqlJob.originSQL, err)
+			sqlJob.checkPointJob.cancel()
 			s.jobWg.Done()
 			continue
 		}
 		s.addCount(true, queueBucket, sqlJob.tp, int64(len(sqlJob.ddls)))
 		finishedJobsTotal.WithLabelValues(sqlJob.tp.String(), s.cfg.Name, adminQueueName, s.cfg.SourceID).Inc()
+		sqlJob.checkPointJob.fulfill()
 		s.jobWg.Done()
 		s.tctx.L().Debug("sync job success", zap.String("type", "ddl"))
 	}
@@ -1050,6 +1116,9 @@ func (s *Syncer) sync(tctx *tcontext.Context, queueBucket string, db *DBConn, jo
 	clearF := func() {
 		for i := 0; i < todoJobsCount; i++ {
 			s.jobWg.Done()
+			if jobs[i].tp != flush { // we fulfill checkpoint job of flush manually
+				jobs[i].checkPointJob.fulfill()
+			}
 		}
 		jobs = jobs[0:0]
 		todoJobsCount = 0
@@ -1122,27 +1191,28 @@ func (s *Syncer) sync(tctx *tcontext.Context, queueBucket string, db *DBConn, jo
 					continue
 				}
 
-				// interrupted after save checkpoint and before flush checkpoint.
-				failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
-					err = handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
-					if err != nil {
-						fatalF(affect, err)
-						s.flushBarrier.Done()
-						s.tctx.L().Debug("sync job failed before flush checkpoint", zap.String("type", sqlJob.tp.String()))
-						failpoint.Continue()
-					}
-				})
+				// // interrupted after save checkpoint and before flush checkpoint.
+				// failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
+				// 	err = handleFlushCheckpointStage(4, val.(int), "before flush checkpoint")
+				// 	if err != nil {
+				// 		fatalF(affect, err)
+				// 		s.flushBarrier.Done()
+				// 		s.tctx.L().Debug("sync job failed before flush checkpoint", zap.String("type", sqlJob.tp.String()))
+				// 		failpoint.Continue()
+				// 	}
+				// })
 
 				s.flushBarrier.Done()
 				s.flushBarrier.Wait()
 				if s.flushBarrier.markAsFlushing() {
-					err = s.flushCheckPoints()
-					s.flushBarrier.release()
-					if err != nil {
-						fatalF(0, err)
-						s.tctx.L().Debug("sync job failed when flush check points", zap.String("type", sqlJob.tp.String()))
-						continue
-					}
+					sqlJob.checkPointJob.fulfill()
+					// err = s.flushCheckPoints()
+					// s.flushBarrier.release()
+					// if err != nil {
+					// 	fatalF(0, err)
+					// 	s.tctx.L().Debug("sync job failed when flush check points", zap.String("type", sqlJob.tp.String()))
+					// 	continue
+					// }
 				}
 				clearF()
 				finishedJobsTotal.WithLabelValues(sqlJob.tp.String(), s.cfg.Name, adminQueueName, s.cfg.SourceID).Inc()
@@ -1151,6 +1221,8 @@ func (s *Syncer) sync(tctx *tcontext.Context, queueBucket string, db *DBConn, jo
 				if len(sqlJob.sql) > 0 {
 					jobs = append(jobs, sqlJob)
 					jobTypeCountMap[sqlJob.tp]++
+				} else {
+					sqlJob.checkPointJob.cancel()
 				}
 
 				if len(jobs) >= s.cfg.Batch {
@@ -1238,6 +1310,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			return terror.Annotate(err, "fail to restart streamer controller")
 		}
 	}
+
+	go s.asyncHandleCheckPointLoop()
 
 	s.queueBucketMapping = make([]string, 0, s.cfg.WorkerCount+1)
 	for i := 0; i < s.cfg.WorkerCount; i++ {
@@ -2610,6 +2684,7 @@ func (s *Syncer) stopSync() {
 		<-s.done // wait Run to return
 	}
 	s.closeJobChans()
+	close(s.checkPointChan)
 	s.wg.Wait() // wait job workers to return
 
 	// before re-write workflow for s.syncer, simply close it
@@ -2618,6 +2693,7 @@ func (s *Syncer) stopSync() {
 	if s.streamerController != nil {
 		s.streamerController.Close(s.tctx)
 	}
+
 }
 
 func (s *Syncer) closeOnlineDDL() {

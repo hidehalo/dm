@@ -73,6 +73,7 @@ type job struct {
 	currentLocation binlog.Location // end location of the sql in binlog, for user to skip sql manually by changing checkpoint
 	ddls            []string
 	originSQL       string // show origin sql when error, only DDL now
+	checkPointJob   *checkPointJob
 }
 
 func (j *job) String() string {
