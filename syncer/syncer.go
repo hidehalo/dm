@@ -775,6 +775,12 @@ func (s *Syncer) addJob(job *job) error {
 		s.tctx.L().Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", job.key))
 		s.jobs[queueBucket] <- job
 		addJobDurationHistogram.WithLabelValues(job.tp.String(), s.cfg.Name, s.queueBucketMapping[queueBucket], s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
+	case async_flush:
+		s.jobWg.Add(s.cfg.WorkerCount)
+		job.shouldSkip.nTimes(s.cfg.WorkerCount)
+		for i := 0; i < s.cfg.WorkerCount; i++ {
+			s.jobs[i] <- job
+		}
 	}
 
 	// nolint:ifshort
@@ -1082,7 +1088,13 @@ func (s *Syncer) sync(tctx *tcontext.Context, queueBucket string, db *DBConn, jo
 			}
 			idx++
 
-			if sqlJob.tp != flush && len(sqlJob.sql) > 0 {
+			if sqlJob.tp == async_flush {
+				if !sqlJob.shouldSkip.thisTime() {
+					// s.flushCheckPoints() please flush sqlJob.currentLocation
+				}
+				idx--
+				s.jobWg.Done()
+			} else if sqlJob.tp != flush && len(sqlJob.sql) > 0 {
 				jobs = append(jobs, sqlJob)
 				tpCnt[sqlJob.tp]++
 			}
@@ -1504,8 +1516,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
 				if s.checkpoint.CheckGlobalPoint() {
-					tctx.L().Info("meet heartbeat event and then flush jobs")
-					err2 = s.flushJobs()
+					tctx.L().Info("meet heartbeat event and then async flush jobs")
+					// err2 = s.flushJobs()
+					err2 = s.asyncFlushJobs()
 				}
 			}
 		}
@@ -2491,6 +2504,11 @@ func (s *Syncer) recordSkipSQLsLocation(location binlog.Location) error {
 func (s *Syncer) flushJobs() error {
 	s.tctx.L().Info("flush all jobs", zap.Stringer("global checkpoint", s.checkpoint))
 	job := newFlushJob()
+	return s.addJobFunc(job)
+}
+
+func (s *Syncer) asyncFlushJobs() error {
+	job := newAsyncFlushJob()
 	return s.addJobFunc(job)
 }
 

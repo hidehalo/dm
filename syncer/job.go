@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/pingcap/dm/pkg/binlog"
 )
@@ -31,6 +32,7 @@ const (
 	flush
 	skip // used by Syncer.recordSkipSQLsLocation to record global location, but not execute SQL
 	rotate
+	async_flush
 )
 
 func (t opType) String() string {
@@ -56,6 +58,24 @@ func (t opType) String() string {
 	return ""
 }
 
+type shouldSkip struct {
+	sync.Mutex
+	ref int
+}
+
+func (s *shouldSkip) nTimes(n int) {
+	s.Lock()
+	defer s.Unlock()
+	s.ref += n
+}
+
+func (s *shouldSkip) thisTime() bool {
+	s.Lock()
+	defer s.Unlock()
+	s.ref--
+	return s.ref > 0
+}
+
 type job struct {
 	tp opType
 	// ddl in ShardOptimistic and ShardPessimistic will only affect one table at one time but for normal node
@@ -72,7 +92,8 @@ type job struct {
 	startLocation   binlog.Location // start location of the sql in binlog, for handle_error
 	currentLocation binlog.Location // end location of the sql in binlog, for user to skip sql manually by changing checkpoint
 	ddls            []string
-	originSQL       string // show origin sql when error, only DDL now
+	originSQL       string      // show origin sql when error, only DDL now
+	shouldSkip      *shouldSkip // `shouldSkip` would tell us should we skip this job
 }
 
 func (j *job) String() string {
@@ -142,6 +163,13 @@ func newXIDJob(location, startLocation, cmdLocation binlog.Location) *job {
 func newFlushJob() *job {
 	return &job{
 		tp: flush,
+	}
+}
+
+func newAsyncFlushJob() *job {
+	return &job{
+		tp:         async_flush,
+		shouldSkip: &shouldSkip{ref: 0},
 	}
 }
 
