@@ -73,7 +73,7 @@ func (s *shouldSkip) thisTime() bool {
 	s.Lock()
 	defer s.Unlock()
 	s.ref--
-	return s.ref > 0
+	return s.ref >= 0
 }
 
 type job struct {

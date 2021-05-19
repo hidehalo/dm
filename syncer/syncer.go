@@ -777,7 +777,7 @@ func (s *Syncer) addJob(job *job) error {
 		addJobDurationHistogram.WithLabelValues(job.tp.String(), s.cfg.Name, s.queueBucketMapping[queueBucket], s.cfg.SourceID).Observe(time.Since(startTime).Seconds())
 	case async_flush:
 		s.jobWg.Add(s.cfg.WorkerCount)
-		job.shouldSkip.nTimes(s.cfg.WorkerCount)
+		job.shouldSkip.nTimes(s.cfg.WorkerCount - 1)
 		for i := 0; i < s.cfg.WorkerCount; i++ {
 			s.jobs[i] <- job
 		}
@@ -1025,7 +1025,9 @@ func (s *Syncer) sync(tctx *tcontext.Context, queueBucket string, db *DBConn, jo
 	count := s.cfg.Batch
 	jobs := make([]*job, 0, count)
 	tpCnt := make(map[opType]int64)
-
+	// 尽管job.startLocation在队列中是乱序的，但是在一个时间段中进入所有队列的所有job被重排序后，一定与addJob时的job序列一致。
+	// 当最后一个async flush job被执行到时，应该flush 这个序列中的最后一个binlog postion
+	// 难点在于，如何在CheckPoint接口抽象的限制下实现这个机制？
 	clearF := func() {
 		for i := 0; i < idx; i++ {
 			s.jobWg.Done()
@@ -1090,7 +1092,7 @@ func (s *Syncer) sync(tctx *tcontext.Context, queueBucket string, db *DBConn, jo
 
 			if sqlJob.tp == async_flush {
 				if !sqlJob.shouldSkip.thisTime() {
-					// s.flushCheckPoints() please flush sqlJob.currentLocation
+					s.flushCheckPoints() // is that ok?
 				}
 				idx--
 				s.jobWg.Done()
