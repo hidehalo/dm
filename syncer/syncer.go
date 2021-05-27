@@ -830,6 +830,8 @@ func (s *Syncer) addJob(job *job) error {
 				s.saveTablePoint(sourceSchema, sourceTable, job.currentLocation)
 			}
 		}
+	case async_flush:
+		return nil
 	}
 
 	if wait {
@@ -905,6 +907,8 @@ func (s *Syncer) flushCheckPoints() error {
 		shardMetaSQLs, shardMetaArgs = s.sgk.PrepareFlushSQLs(exceptTableIDs)
 		s.tctx.L().Info("prepare flush sqls", zap.Strings("shard meta sqls", shardMetaSQLs), zap.Reflect("shard meta arguments", shardMetaArgs))
 	}
+	s.tctx.L().Debug("flush points except", zap.Reflect("except tables", exceptTables))
+	s.tctx.L().Debug("flush points except", zap.Reflect("shard meta SQLs", shardMetaSQLs), zap.Reflect("shard meta args", shardMetaArgs))
 
 	err = s.checkpoint.FlushPointsExcept(s.tctx, exceptTables, shardMetaSQLs, shardMetaArgs)
 	if err != nil {
